@@ -1,6 +1,8 @@
-#include "Adafruit_MAX31855.h"
 #include <Wire.h>
-#include <LiquidCrystal_I2C.h>
+#include "Adafruit_MAX31855.h"
+#include "LiquidCrystal_I2C.h"
+#include "PID_v1.h"
+#include "RotaryEncoder.h"
 
 // thermopair
 int thermoCS1 = 2;
@@ -9,18 +11,20 @@ int thermoDO  = 4;
 Adafruit_MAX31855 tc(thermoCLK, thermoCS1, thermoDO);
 
 //PID
-#include <PID_v1.h>
 //Define Variables we'll be connecting to
 double Setpoint, Input, Output;
 //Specify the links and initial tuning parameters
 PID myPID(&Input, &Output, &Setpoint, 2, 5, 1, DIRECT);
 
 //LCD address is 0x27 for a 16 chars and 2 line display
-LiquidCrystal_I2C lcd(0x27,16,2);  
+int lcdAddress = 0x27;
+LiquidCrystal_I2C lcd(lcdAddress,16,2);  
 
 //Rotary Encoder
-#include <RotaryEncoder.h>
-RotaryEncoder encoder(9, 10);
+int rotaryA = 9;
+int rotaryB = 10;
+RotaryEncoder encoder(rotaryA, rotaryB);
+
 
 void setup() {
 
