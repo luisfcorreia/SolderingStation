@@ -1,16 +1,17 @@
 #include <Wire.h>
 #include "SevSeg.h"
-#include "Adafruit_MAX31855.h"
+#include "MAX31855.h"
 #include "PID_v1.h"
 #include "ClickEncoder.h"
 #include "TimerOne.h"
 
 // thermopair
-int thermoCS1 = 8;
-int thermoCLK = 9;
-int thermoDO  = 7;
-Adafruit_MAX31855 tc(thermoCLK, thermoCS1, thermoDO);
-double Celsius = 25;
+const int doPin = 7;
+const int csPin = 8;
+const int clPin = 9;
+MAX31855 tc(clPin, csPin, doPin);
+int status;
+double internal, celsius;
 unsigned long tempTime;
 int tempLapse = 1500;
 
@@ -47,14 +48,14 @@ ClickEncoder *encoder;
 int WindowSize = 500;
 unsigned long windowStartTime;
 double Setpoint, Input, Output;
-PID myPID(&Input, &Output, &Setpoint, 2, 5, 1, DIRECT);
+PID myPID(&Input, &Output, &Setpoint, 2, 5, 1, REVERSE);
 
 // Variables
 int newPos = 0;
 int pos = 80;
-int coolTemp = 80;
-int maxTemp = 450;
-int setTemperature = coolTemp;
+double coolTemp = 80;
+double maxTemp = 450;
+double setTemperature = coolTemp;
 
 // ISR for ClickEncoder
 void rotary() {
@@ -84,7 +85,17 @@ void setup() {
 
   // Timer for temperature reading
   tempTime = millis();
+  tc.begin();
+
+  // set relay pin
+  pinMode(RelayPin, OUTPUT);
+
+  // setup serial
   Serial.begin(115200);
+
+//  while (!Serial) {
+//    ; // wait for serial port to connect. Needed for native USB
+//  }
 
 }
 
@@ -108,17 +119,20 @@ void loop() {
 
   if (millis() >= tempTime) {
     tempTime = millis() + tempLapse;
+
     // read Temperature
-    Celsius = tc.readCelsius();
-    Serial.print ("Temp: ");
-    Serial.println (Celsius);
-    Input = Celsius;
+    status = tc.read();
+    internal = tc.getInternal();
+    celsius = tc.getTemperature();
+    Input = celsius;
     Setpoint = setTemperature;
   }
 
   myPID.Compute();
 
-  sprintf(tempString, "%03d", setTemperature);
+//  sprintf(tempString, "%03d", (int)setTemperature);
+  sprintf(tempString, "%03d", (int)Input);
+//  sprintf(tempString, "%03d", (int)Output);
   myDisplay.DisplayString(tempString, 4);
 
   /************************************************
@@ -130,14 +144,14 @@ void loop() {
   }
   if (Output < millis() - windowStartTime) {
     digitalWrite(RelayPin, HIGH);
-    //    Serial.print ("Temp: ");
-    //    Serial.print (Input);
-    //    Serial.println(" Relay ON");
+        Serial.print ("Temp: ");
+        Serial.print (Input);
+        Serial.println(" Relay ON");
   }
   else {
     digitalWrite(RelayPin, LOW);
-    //    Serial.print ("Temp: ");
-    //    Serial.print (Input);
-    //    Serial.println(" Relay OFF");
+        Serial.print ("Temp: ");
+        Serial.print (Input);
+        Serial.println(" Relay OFF");
   }
 }
