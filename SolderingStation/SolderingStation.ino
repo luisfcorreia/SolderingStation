@@ -1,19 +1,17 @@
 #include <Wire.h>
+#include "PID_v1.h"
 #include "SevSeg.h"
 #include "MAX31855.h"
-#include "PID_v1.h"
-#include "ClickEncoder.h"
 #include "TimerOne.h"
+#include "ClickEncoder.h"
 
 // thermopair
 const int doPin = 7;
 const int csPin = 8;
 const int clPin = 9;
 MAX31855 tc(clPin, csPin, doPin);
-int status;
+int tcstatus;
 double internal, celsius;
-unsigned long tempTime;
-int tempLapse = 1500;
 
 //7Segment 3 digit thing
 SevSeg myDisplay;
@@ -43,12 +41,10 @@ int rotaryB = 1;
 int rotaryP = 5;
 ClickEncoder *encoder;
 
-//Relay and PID
-#define RelayPin 6
-int WindowSize = 500;
-unsigned long windowStartTime;
+//PWM and PID
+#define PWMPin 6
 double Setpoint, Input, Output;
-PID myPID(&Input, &Output, &Setpoint, 2, 5, 1, REVERSE);
+PID myPID(&Input, &Output, &Setpoint, 4, 0.2, 1, REVERSE);
 
 // Variables
 int newPos = 0;
@@ -56,6 +52,7 @@ int pos = 80;
 double coolTemp = 80;
 double maxTemp = 450;
 double setTemperature = coolTemp;
+int pwm = 0;
 
 // ISR for ClickEncoder
 void rotary() {
@@ -65,9 +62,10 @@ void rotary() {
 void setup() {
 
   //turn the PID on
-  windowStartTime = millis();
   Setpoint = setTemperature;
-  myPID.SetOutputLimits(0, WindowSize);
+  
+  //  myPID.SetOutputLimits(0, WindowSize);
+  myPID.SetOutputLimits(0, 255);
   myPID.SetMode(AUTOMATIC);
 
   // initialize 7 segment
@@ -83,19 +81,18 @@ void setup() {
   Timer1.initialize(1000);
   Timer1.attachInterrupt(rotary);
 
-  // Timer for temperature reading
-  tempTime = millis();
+  // Temperature reading
   tc.begin();
 
-  // set relay pin
-  pinMode(RelayPin, OUTPUT);
+  // set PWM pin
+  pinMode(PWMPin, OUTPUT);
 
   // setup serial
   Serial.begin(115200);
 
-//  while (!Serial) {
-//    ; // wait for serial port to connect. Needed for native USB
-//  }
+  //  while (!Serial) {
+  //    ; // wait for serial port to connect. Needed for native USB
+  //  }
 
 }
 
@@ -103,6 +100,8 @@ void loop() {
 
   // Get RotaryEncoder value
   newPos += encoder->getValue();
+
+  // Prevent rotary values to get outside possible values
   if (newPos < pos) {
     setTemperature = setTemperature - 10;
     if (setTemperature <= coolTemp) {
@@ -117,41 +116,25 @@ void loop() {
   }
   pos = newPos;
 
-  if (millis() >= tempTime) {
-    tempTime = millis() + tempLapse;
+  // read Temperature
+  tcstatus = tc.read();
+  celsius = tc.getTemperature();
+  Input = celsius;
+  Setpoint = setTemperature;
 
-    // read Temperature
-    status = tc.read();
-    internal = tc.getInternal();
-    celsius = tc.getTemperature();
-    Input = celsius;
-    Setpoint = setTemperature;
-  }
-
+  // Compute PID
   myPID.Compute();
 
-//  sprintf(tempString, "%03d", (int)setTemperature);
-  sprintf(tempString, "%03d", (int)Input);
-//  sprintf(tempString, "%03d", (int)Output);
+  // Show set temperature in 7 segment display
+  sprintf(tempString, "%03d", (int)setTemperature);
   myDisplay.DisplayString(tempString, 4);
 
-  /************************************************
-     turn the output pin on/off based on pid output
-   ************************************************/
-  if (millis() - windowStartTime > WindowSize)
-  { //time to shift the Relay Window
-    windowStartTime += WindowSize;
-  }
-  if (Output < millis() - windowStartTime) {
-    digitalWrite(RelayPin, HIGH);
-        Serial.print ("Temp: ");
-        Serial.print (Input);
-        Serial.println(" Relay ON");
-  }
-  else {
-    digitalWrite(RelayPin, LOW);
-        Serial.print ("Temp: ");
-        Serial.print (Input);
-        Serial.println(" Relay OFF");
-  }
+  // Write PWM value to MOSFET
+  pwm = Output;
+  analogWrite(PWMPin, pwm);
+
+  // for debug only
+  Serial.print ("Temp: ");
+  Serial.println (Input);
+
 }
